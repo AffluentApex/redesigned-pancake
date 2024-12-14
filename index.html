@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Market Analyzer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1e2a78, #ff3c5f);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .stock-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .info-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: transform 0.2s ease;
+        }
+
+        .info-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .info-card h3 {
+            margin: 0;
+            font-size: 1.2rem;
+            opacity: 0.8;
+        }
+
+        .info-card p {
+            margin: 0.5rem 0;
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+            height: 400px;
+            transition: transform 0.3s ease;
+        }
+
+        .chart-container:hover {
+            transform: scale(1.01);
+        }
+
+        .search-section {
+            text-align: center;
+            padding: 2rem 0;
+        }
+
+        input {
+            width: 300px;
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 25px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 1rem;
+            margin-right: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        input:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        button {
+            padding: 0.8rem 2rem;
+            border: none;
+            border-radius: 25px;
+            background: #ff3c5f;
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        button:hover {
+            background: #ff1f47;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(255, 60, 95, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .positive { 
+            color: #4caf50;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        .negative { 
+            color: #ff3c5f;
+            animation: fadeIn 0.5s ease;
+        }
+
+        #error-message {
+            color: #ff3c5f;
+            text-align: center;
+            margin: 1rem 0;
+            display: none;
+            animation: shake 0.5s ease;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 1rem 0;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="search-section">
+            <h1>Stock Market Analyzer</h1>
+            <input type="text" id="stockSearch" placeholder="Enter stock symbol (e.g., AAPL)">
+            <button onclick="searchStock()">Analyze</button>
+            <div id="loading" class="loading">Fetching market data...</div>
+            <div id="error-message"></div>
+        </div>
+
+        <div class="stock-info">
+            <div class="info-card">
+                <h3>Current Price</h3>
+                <p id="currentPrice">--</p>
+            </div>
+            <div class="info-card">
+                <h3>Change</h3>
+                <p id="priceChange">--</p>
+            </div>
+            <div class="info-card">
+                <h3>Volume</h3>
+                <p id="volume">--</p>
+            </div>
+            <div class="info-card">
+                <h3>High/Low</h3>
+                <p id="highLow">--</p>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="priceChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const API_KEY = 'STBDYAS966Z82LTG';
+        let priceChart;
+
+        async function fetchStockData(symbol) {
+            try {
+                const response = await fetch(`https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${API_KEY}`);
+                const data = await response.json();
+
+                if (data['Error Message']) {
+                    throw new Error('Oops! We couldn\'t find that stock symbol. Please check and try again.');
+                }
+
+                if (data['Note']) {
+                    throw new Error('We\'re a bit too popular right now! Please wait a minute and try again.');
+                }
+
+                return data;
+            } catch (error) {
+                throw error;
+            }
+        }
+
+        async function searchStock() {
+            const symbol = document.getElementById('stockSearch').value.toUpperCase();
+            const loadingDiv = document.getElementById('loading');
+            const errorDiv = document.getElementById('error-message');
+
+            if (!symbol) {
+                showError('Please enter a stock symbol to begin your analysis');
+                return;
+            }
+
+            loadingDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+
+            try {
+                const data = await fetchStockData(symbol);
+                const timeSeriesData = data['Time Series (Daily)'];
+                const dates = Object.keys(timeSeriesData).slice(0, 30).reverse();
+                const prices = dates.map(date => parseFloat(timeSeriesData[date]['4. close']));
+
+                // Update UI with latest market insights
+                const latestDate = dates[dates.length - 1];
+                const latestData = timeSeriesData[latestDate];
+                const previousData = timeSeriesData[dates[dates.length - 2]];
+
+                const currentPrice = parseFloat(latestData['4. close']);
+                const previousPrice = parseFloat(previousData['4. close']);
+                const priceChange = currentPrice - previousPrice;
+                const priceChangePercent = (priceChange / previousPrice) * 100;
+
+                // Display data with smooth animations
+                animateValue('currentPrice', previousPrice, currentPrice, 1000, (value) => `$${value.toFixed(2)}`);
+                
+                const changeText = `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)} (${priceChangePercent.toFixed(2)}%)`;
+                document.getElementById('priceChange').textContent = changeText;
+                document.getElementById('priceChange').className = priceChange >= 0 ? 'positive' : 'negative';
+                
+                const volumeValue = parseInt(latestData['5. volume']);
+                animateValue('volume', 0, volumeValue, 1000, (value) => value.toLocaleString());
+                
+                document.getElementById('highLow').textContent = 
+                    `$${parseFloat(latestData['2. high']).toFixed(2)} / $${parseFloat(latestData['3. low']).toFixed(2)}`;
+
+                updateChart(dates, prices, symbol);
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function animateValue(elementId, start, end, duration, formatter) {
+            const element = document.getElementById(elementId);
+            const range = end - start;
+            const startTime = performance.now();
+            
+            function update(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                
+                const value = start + (range * progress);
+                element.textContent = formatter(value);
+                
+                if (progress < 1) {
+                    requestAnimationFrame(update);
+                }
+            }
+            
+            requestAnimationFrame(update);
+        }
+
+        function updateChart(dates, prices, symbol) {
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            
+            if (priceChart) {
+                priceChart.destroy();
+            }
+
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, 'rgba(0, 123, 255, 0.2)');
+            gradient.addColorStop(1, 'rgba(0, 123, 255, 0)');
+
+            priceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: `${symbol} Stock Price`,
+                        data: prices,
+                        borderColor: '#007bff',
+                        backgroundColor: gradient,
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: '#007bff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointBorderColor: '#fff',
+                        pointHoverBorderColor: '#007bff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 2000,
+                        easing: 'easeInOutQuart'
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: 'rgba(255, 255, 255, 0.8)',
+                                font: {
+                                    size: 14
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            padding: 12,
+                            titleFont: {
+                                size: 14
+                            },
+                            bodyFont: {
+                                size: 13
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.8)',
+                                callback: (value) => `$${value.toFixed(2)}`
+                            }
+                        },
+                        x: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.8)',
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Add enter key support for search with feedback
+        const searchInput = document.getElementById('stockSearch');
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                searchStock();
+                searchInput.blur(); // Remove focus after search
+            }
+        });
+
+        // Add loading feedback on button click
+        document.querySelector('button').addEventListener('click', function() {
+            this.style.opacity = '0.8';
+            setTimeout(() => this.style.opacity = '1', 200);
+        });
+    </script>
+</body>
+</html>
