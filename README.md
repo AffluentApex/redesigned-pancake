@@ -2,7 +2,6 @@
 
 A sleek and interactive web application that allows users to analyze stock market data with real-time visualizations and key metrics.
 
-![Stock Market Analyzer](stock-analyzer-preview.png)
 
 ## Project Overview
 
